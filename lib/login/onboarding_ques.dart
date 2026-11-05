@@ -29,7 +29,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> with TickerProviderStat
   String _gender = '';
 
   final List<String> _suggestedNicknames = [
-    'Shadow', 'Titan', 'Sparky', 'Ace', 'Luna', 'Nova', 'Champ'
+    'Ninja', 'Titan', 'Sparky', 'Ace', 'Luna', 'Nova', 'Champ'
   ];
 
   double get _bmi => _weight / ((_height / 100) * (_height / 100));
