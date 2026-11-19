@@ -350,32 +350,68 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
+            clipBehavior: Clip.none,
             child: ValueListenableBuilder<int>(
               valueListenable: activeIndex,
               builder: (context, current, _) {
                 final cats = ['Activity', 'Wellbeing', 'Diet', 'Vitals', 'Tongue'];
-                final ics = [Icons.directions_run, Icons.nights_stay, Icons.restaurant, Icons.monitor_heart, Icons.lens_blur];
-                final cols = [const Color(0xFF6366F1), const Color(0xFF8B5CF6), const Color(0xFF0EA5E9), const Color(0xFFEC4899), const Color(0xFF84CC16)];
+                final ics = [
+                  Icons.directions_run,
+                  Icons.nights_stay,
+                  Icons.restaurant,
+                  Icons.monitor_heart,
+                  Icons.lens_blur,
+                ];
+                const activeColor = Color(0xFF8B5CF6);
 
                 return Row(
                   children: List.generate(5, (i) {
-                    bool isSelected = current == i;
+                    final bool isSelected = current == i;
                     return GestureDetector(
                       onTap: () => activeIndex.value = i,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
                         margin: const EdgeInsets.only(right: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isSelected ? cols[i] : Colors.white.withOpacity(0.05),
+                          color: isSelected ? activeColor : Colors.white.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: isSelected ? cols[i] : Colors.white.withOpacity(0.1), width: 1),
+                          border: Border.all(
+                            color: isSelected ? activeColor : Colors.white.withOpacity(0.1),
+                            width: 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: activeColor.withOpacity(0.35),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Icon(ics[i], color: isSelected ? Colors.white : Colors.white38, size: 16),
-                            if (isSelected) const SizedBox(width: 8),
-                            if (isSelected) Text(cats[i], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                            Icon(
+                              ics[i],
+                              color: isSelected ? Colors.white : Colors.white60,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              cats[i],
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.white60,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                fontSize: 12.5,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
                           ],
                         ),
                       ),
