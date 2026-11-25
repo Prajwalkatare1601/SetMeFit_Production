@@ -80,8 +80,20 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
 
       final today = DateTime.now().toIso8601String().split('T')[0];
 
-      await supabase.from('activity_logs').upsert(
-        {
+      final existing = await supabase.schema('setmefit').from('activity_logs').select('id, ${widget.activityType}').eq('user_id', user.id).eq('date', today).maybeSingle();
+      if (existing != null) {
+        Map<String, dynamic> actData = Map<String, dynamic>.from(existing[widget.activityType] ?? {});
+        actData.addAll({
+          'distance_km': distanceKm.toStringAsFixed(2),
+          'time': _formatDuration(time),
+          'pace': pace,
+          'recorded_at': DateTime.now().toIso8601String(),
+        });
+        await supabase.schema('setmefit').from('activity_logs').update({
+          widget.activityType: actData,
+        }).eq('id', existing['id']);
+      } else {
+        await supabase.schema('setmefit').from('activity_logs').insert({
           'user_id': user.id,
           'date': today,
           widget.activityType: {
@@ -90,9 +102,8 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
             'pace': pace,
             'recorded_at': DateTime.now().toIso8601String(),
           },
-        },
-        onConflict: 'user_id,date',
-      );
+        });
+      }
     } catch (e) {
       debugPrint('Supabase error: $e');
     }

@@ -60,14 +60,15 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
 
     try {
       final data = await Supabase.instance.client
+          .schema('setmefit')
           .from('profiles')
           .select('first_name')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
       if (mounted) {
         setState(() {
-          firstName = data['first_name'] ?? "USER";
+          firstName = data?['first_name'] ?? "USER";
         });
       }
     } catch (e) {
@@ -98,6 +99,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
     try {
       // We use maybeSingle() to avoid exceptions if the row is still being written
       final data = await supabase
+          .schema('setmefit')
           .from('user_health_profiles')
           .select('health_score')
           .eq('id', user.id)
@@ -122,6 +124,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
 
       if (userId != null) {
         await supabase
+            .schema('setmefit')
             .from('profiles')
             .update({
           // Ensure it is stored as a rounded 3-digit integer
@@ -170,7 +173,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
     final String tongueColor = (healthData['tongue']?['color'] ?? "Not Checked").toString();
 
     final width = MediaQuery.of(context).size.width;
-    final wheelSize = (width * 0.65).clamp(200.0, 260.0);
+    final wheelSize = (width * 0.72).clamp(250.0, 300.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFF050505), // Deeper Black
@@ -247,7 +250,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
                   children: [
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: wheelSize,
+                      height: wheelSize + 16,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: WheelWithCenter(
@@ -289,10 +292,10 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
     if (user == null) return {};
 
     final results = await Future.wait([
-      supabase.from('activity_logs').select().eq('user_id', user.id).order('date', ascending: false).limit(1).maybeSingle(),
-      supabase.from('wellbeing_logs').select().eq('user_id', user.id).order('log_date', ascending: false).limit(1).maybeSingle(),
-      supabase.from('medical_vitals').select().eq('user_id', user.id).maybeSingle(),
-      supabase.from('tongue_records').select().eq('user_id', user.id).order('timestamp', ascending: false).limit(1).maybeSingle(),
+      supabase.schema('setmefit').from('activity_logs').select().eq('user_id', user.id).order('date', ascending: false).limit(1).maybeSingle(),
+      supabase.schema('setmefit').from('wellbeing_logs').select().eq('user_id', user.id).order('log_date', ascending: false).limit(1).maybeSingle(),
+      supabase.schema('setmefit').from('medical_vitals').select().eq('user_id', user.id).maybeSingle(),
+      supabase.schema('setmefit').from('tongue_records').select().eq('user_id', user.id).order('timestamp', ascending: false).limit(1).maybeSingle(),
     ]);
 
     return {
@@ -389,7 +392,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
 
           // NESTED STREAMS FOR DATA
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: Supabase.instance.client.from('user_targets').stream(primaryKey: ['user_id']).eq('user_id', userId ?? ''),
+            stream: Supabase.instance.client.schema('setmefit').from('user_targets').stream(primaryKey: ['user_id']).eq('user_id', userId ?? ''),
             builder: (context, targetSnapshot) {
               final targetData = targetSnapshot.data?.firstOrNull ?? {};
               final double tCal = (targetData['target_calories'] ?? 2000).toDouble();
@@ -397,28 +400,28 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
               final double tSteps = (targetData['target_steps'] ?? 10000).toDouble();
 
               return StreamBuilder<List<Map<String, dynamic>>>(
-                stream: Supabase.instance.client.from('activity_logs').stream(primaryKey: ['id']).order('date', ascending: false).limit(1),
+                stream: Supabase.instance.client.schema('setmefit').from('activity_logs').stream(primaryKey: ['id']).order('date', ascending: false).limit(1),
                 builder: (context, activitySnapshot) {
                   final activityData = activitySnapshot.data?.firstOrNull ?? {};
 
                   return StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: Supabase.instance.client.from('wellbeing_logs').stream(primaryKey: ['id']).order('log_date', ascending: false).limit(1),
+                    stream: Supabase.instance.client.schema('setmefit').from('wellbeing_logs').stream(primaryKey: ['id']).order('log_date', ascending: false).limit(1),
                     builder: (context, wellbeingSnapshot) {
                       final wellbeingData = wellbeingSnapshot.data?.firstOrNull ?? {};
 
                       return StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: Supabase.instance.client.from('medical_vitals').stream(primaryKey: ['user_id']).order('log_date', ascending: false).limit(1),
+                        stream: Supabase.instance.client.schema('setmefit').from('medical_vitals').stream(primaryKey: ['user_id']).order('log_date', ascending: false).limit(1),
                         builder: (context, vitalsSnapshot) {
                           final vitalsData = vitalsSnapshot.data?.firstOrNull ?? {};
 
                           return StreamBuilder<List<Map<String, dynamic>>>(
-                            stream: Supabase.instance.client.from('tongue_records').stream(primaryKey: ['id']).order('timestamp', ascending: false).limit(1),
+                            stream: Supabase.instance.client.schema('setmefit').from('tongue_records').stream(primaryKey: ['id']).order('timestamp', ascending: false).limit(1),
                             builder: (context, tongueSnapshot) {
                               final tongueData = tongueSnapshot.data?.firstOrNull ?? {};
 
                               // DIET LOGS STREAM
                               return StreamBuilder<List<Map<String, dynamic>>>(
-                                stream: Supabase.instance.client.from('diet_logs').stream(primaryKey: ['id']).eq('user_id', userId ?? '').order('log_date', ascending: false).limit(1),
+                                stream: Supabase.instance.client.schema('setmefit').from('diet_logs').stream(primaryKey: ['id']).eq('user_id', userId ?? '').order('log_date', ascending: false).limit(1),
                                 builder: (context, dietSnapshot) {
                                   final dietRaw = dietSnapshot.data?.firstOrNull ?? {};
                                   // Validate it's for today

@@ -29,6 +29,7 @@ final historyProvider = FutureProvider.family<void, DateTime>((ref, date) async 
 
     // --- Fetch food logs ---
     final foodResponse = await supabase
+        .schema('setmefit')
         .from('food_logs')
         .select(
         'id, quantity, consumed_at, foods(name, calories, carbs, protein, fat, fiber, emoji)')
@@ -41,6 +42,7 @@ final historyProvider = FutureProvider.family<void, DateTime>((ref, date) async 
 
     // --- Fetch meal logs ---
     final mealResponse = await supabase
+        .schema('setmefit')
         .from('meal_logs_view')
         .select('*')
         .eq('user_id', userId)
@@ -97,6 +99,7 @@ final historyProvider = FutureProvider.family<void, DateTime>((ref, date) async 
     final endOfWeek = startOfWeek.add(const Duration(days: 7));
 
     final weeklyFoodResponse = await supabase
+        .schema('setmefit')
         .from('food_logs')
         .select('quantity, consumed_at, foods(calories)')
         .eq('user_id', userId)
@@ -104,6 +107,7 @@ final historyProvider = FutureProvider.family<void, DateTime>((ref, date) async 
         .lt('consumed_at', endOfWeek.toIso8601String());
 
     final weeklyMealResponse = await supabase
+        .schema('setmefit')
         .from('meal_logs_view')
         .select('consumed_at, total_calories')
         .eq('user_id', userId)

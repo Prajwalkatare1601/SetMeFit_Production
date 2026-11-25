@@ -254,7 +254,7 @@ The JSON must contain these exact keys:
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        await Supabase.instance.client.from('user_targets').upsert({
+        await Supabase.instance.client.schema('setmefit').from('user_targets').upsert({
           'user_id': user.id,
           'target_calories': _targetCalories.toDouble(),
           'target_steps': _targetSteps.toDouble(),

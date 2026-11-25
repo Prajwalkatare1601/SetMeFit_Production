@@ -275,14 +275,14 @@ class _AddFoodPageState extends ConsumerState<AddFoodPage>
                           if (userId == null) throw Exception("User not logged in");
 
                           if (isMeal) {
-                            await supabase.from('meal_logs').insert({
+                            await supabase.schema('setmefit').from('meal_logs').insert({
                               'user_id': userId,
                               'meal_id': item['id'],
                               'quantity': finalQuantity,
                               'consumed_at': consumedAt,
                             });
                           } else {
-                            await supabase.from('food_logs').insert({
+                            await supabase.schema('setmefit').from('food_logs').insert({
                               'user_id': userId,
                               'food_id': item['id'],
                               'quantity': finalQuantity,

@@ -685,6 +685,7 @@ class _TargetWeightScreenState extends State<TargetWeightScreen> {
 
                           if (userId != null) {
                             await supabase
+                                .schema('setmefit')
                                 .from('profiles')
                                 .update({
                               'weight': currentWeight,

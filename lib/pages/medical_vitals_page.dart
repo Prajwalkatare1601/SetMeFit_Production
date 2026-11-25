@@ -166,6 +166,7 @@ class _VitalsPageState extends State<VitalsPage> with TickerProviderStateMixin {
 
     try {
       final data = await supabase
+          .schema('setmefit')
           .from('medical_vitals')
           .select()
           .eq('user_id', user.id)
@@ -220,12 +221,20 @@ class _VitalsPageState extends State<VitalsPage> with TickerProviderStateMixin {
     final today = DateTime.now().toIso8601String().split('T')[0];
 
     try {
-      await supabase.from('medical_vitals').upsert({
-        'user_id': user.id,
-        'log_date': today, // Ensures one row per user per day
-        dbColumn: val,
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'user_id,log_date');
+      final existing = await supabase.schema('setmefit').from('medical_vitals').select('id').eq('user_id', user.id).eq('log_date', today).maybeSingle();
+      if (existing != null) {
+        await supabase.schema('setmefit').from('medical_vitals').update({
+          dbColumn: val,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', existing['id']);
+      } else {
+        await supabase.schema('setmefit').from('medical_vitals').insert({
+          'user_id': user.id,
+          'log_date': today,
+          dbColumn: val,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
 
       _fetchLatestVitals(); // Refresh the "Last Updated" text
     } catch (e) {
@@ -240,12 +249,13 @@ class _VitalsPageState extends State<VitalsPage> with TickerProviderStateMixin {
 
     try {
       final data = await supabase
+          .schema('setmefit')
           .from('profiles')
           .select('gender')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
-      if (data['gender'] != null) {
+      if (data != null && data['gender'] != null) {
         model.setGender(data['gender']); // Assigns 'Male' or 'Female' from DB
       }
     } catch (e) {

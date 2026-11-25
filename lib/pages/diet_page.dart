@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'add_food_page.dart';
 import 'package:intl/intl.dart';
-import 'package:food_log/providers/home_provider.dart';
-import 'package:food_log/providers/history_provider.dart';
+import 'package:setmefit/providers/home_provider.dart';
+import 'package:setmefit/providers/history_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // ────────────────────────────────────────────────
@@ -98,6 +98,7 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
 
     try {
       final response = await supabase
+          .schema('setmefit')
           .from('user_targets')
           .select('target_calories')
           .eq('user_id', user.id)
@@ -132,15 +133,26 @@ class _HomePageState extends ConsumerState<HomePage> with TickerProviderStateMix
     }
 
     try {
-      await supabase.from('diet_logs').upsert({
-        'user_id': user.id,
-        'log_date': today,
-        'total_calories': cal.round(),
-        'total_protein': prot.round(),
-        'total_carbs': carb.round(),
-        'total_fat': fat.round(),
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'user_id,log_date');
+      final existing = await supabase.schema('setmefit').from('diet_logs').select('id').eq('user_id', user.id).eq('log_date', today).maybeSingle();
+      if (existing != null) {
+        await supabase.schema('setmefit').from('diet_logs').update({
+          'total_calories': cal.round(),
+          'total_protein': prot.round(),
+          'total_carbs': carb.round(),
+          'total_fat': fat.round(),
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', existing['id']);
+      } else {
+        await supabase.schema('setmefit').from('diet_logs').insert({
+          'user_id': user.id,
+          'log_date': today,
+          'total_calories': cal.round(),
+          'total_protein': prot.round(),
+          'total_carbs': carb.round(),
+          'total_fat': fat.round(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
     } catch (e) {
       debugPrint("Sync error: $e");
     }
@@ -929,6 +941,7 @@ class _WaterPageState extends State<WaterPage> with TickerProviderStateMixin {
 
     // Load current total from Supabase
     final res = await supabase
+        .schema('setmefit')
         .from('water_logs')
         .select('amount')
         .eq('user_id', user.id)
@@ -959,12 +972,20 @@ class _WaterPageState extends State<WaterPage> with TickerProviderStateMixin {
     final now = DateTime.now();
 
     // Update/insert daily total
-    await supabase.from('water_logs').upsert({
-      'user_id': user.id,
-      'log_date': todayDate,
-      'amount': newTotal,
-      'logged_at': now.toIso8601String(),
-    }, onConflict: 'user_id,log_date');
+    final existingWater = await supabase.schema('setmefit').from('water_logs').select('id').eq('user_id', user.id).eq('log_date', todayDate).maybeSingle();
+    if (existingWater != null) {
+      await supabase.schema('setmefit').from('water_logs').update({
+        'amount': newTotal,
+        'logged_at': now.toIso8601String(),
+      }).eq('id', existingWater['id']);
+    } else {
+      await supabase.schema('setmefit').from('water_logs').insert({
+        'user_id': user.id,
+        'log_date': todayDate,
+        'amount': newTotal,
+        'logged_at': now.toIso8601String(),
+      });
+    }
 
     if (mounted) {
       setState(() {
@@ -1007,7 +1028,7 @@ class _WaterPageState extends State<WaterPage> with TickerProviderStateMixin {
 
     final newTotal = currentMl - mlToRemove;
 
-    await supabase.from('water_logs').update({
+    await supabase.schema('setmefit').from('water_logs').update({
       'amount': newTotal,
       'logged_at': DateTime.now().toIso8601String(),
     }).eq('user_id', user.id).eq('log_date', todayDate);

@@ -10,6 +10,7 @@ final initialHealthScoreProvider = FutureProvider<double?>((ref) async {
 
   try {
     final data = await Supabase.instance.client
+        .schema('setmefit')
         .from('user_health_profiles')
         .select('health_score')
         .eq('id', user.id)
@@ -31,6 +32,7 @@ final healthDataStreamProvider = StreamProvider<Map<String, dynamic>>((ref) {
   // Added 'filterCol' parameter to specify which column to match the userId against
   Stream<Map<String, dynamic>> tableStream(String table, String orderCol, {String filterCol = 'user_id'}) {
     return client
+        .schema('setmefit')
         .from(table)
         .stream(primaryKey: ['id'])
         .eq(filterCol, userId) // Uses the specified column (defaults to user_id)

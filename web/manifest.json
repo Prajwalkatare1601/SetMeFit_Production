@@ -1,11 +1,11 @@
 {
-    "name": "food_log",
-    "short_name": "food_log",
+    "name": "setmefit",
+    "short_name": "setmefit",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "setmefit, a health and fitness companion.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

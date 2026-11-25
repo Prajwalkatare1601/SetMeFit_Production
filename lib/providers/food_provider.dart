@@ -15,7 +15,7 @@ final currentUserProvider = Provider<User?>((ref) {
 /// Fetch all foods
 final foodsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final supabase = ref.watch(supabaseProvider);
-  final response = await supabase.from('foods').select();
+  final response = await supabase.schema('setmefit').from('foods').select();
   return List<Map<String, dynamic>>.from(response);
 });
 
@@ -26,6 +26,7 @@ final favoritesProvider = FutureProvider<List<String>>((ref) async {
   if (user == null) return [];
 
   final response = await supabase
+      .schema('setmefit')
       .from('user_favorites')
       .select('food_id')
       .eq('user_id', user.id);
@@ -59,13 +60,14 @@ final favoriteActionsProvider = Provider((ref) {
     if (isFav) {
       // Remove from favorites
       await supabase
+          .schema('setmefit')
           .from('user_favorites')
           .delete()
           .eq('user_id', user.id)
           .eq('food_id', foodId);
     } else {
       // Add to favorites
-      await supabase.from('user_favorites').insert({
+      await supabase.schema('setmefit').from('user_favorites').insert({
         'user_id': user.id,
         'food_id': foodId,
       });
@@ -84,6 +86,7 @@ final userMealsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async
   if (user == null) return [];
 
   final response = await supabase
+      .schema('setmefit')
       .from('user_meals')
       .select('id, name, emoji, user_meal_items(food_id, quantity)')
       .eq('user_id', user.id);
@@ -100,7 +103,7 @@ final saveCustomMealProvider = Provider((ref) {
     if (user == null) return;
 
     // Insert into user_meals
-    final mealResponse = await supabase.from('user_meals').insert({
+    final mealResponse = await supabase.schema('setmefit').from('user_meals').insert({
       'user_id': user.id,
       'name': name,
       'emoji': emoji,
@@ -117,7 +120,7 @@ final saveCustomMealProvider = Provider((ref) {
       };
     }).toList();
 
-    await supabase.from('user_meal_items').insert(mealItems);
+    await supabase.schema('setmefit').from('user_meal_items').insert(mealItems);
 
     // Refresh user meals provider
     ref.invalidate(historyProvider(ref.read(selectedDateProvider)));
@@ -129,10 +132,10 @@ final deleteCustomMealProvider = Provider((ref) {
 
   return (String mealId) async {
     // 1. Delete meal items
-    await supabase.from('user_meal_items').delete().eq('meal_id', mealId);
+    await supabase.schema('setmefit').from('user_meal_items').delete().eq('meal_id', mealId);
 
     // 2. Delete meal
-    await supabase.from('user_meals').delete().eq('id', mealId);
+    await supabase.schema('setmefit').from('user_meals').delete().eq('id', mealId);
 
     // 3. Refresh userMealsProvider
     ref.invalidate(userMealsProvider);

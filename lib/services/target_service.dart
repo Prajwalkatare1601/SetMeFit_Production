@@ -11,7 +11,7 @@ class TargetService {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
-    await _supabase.from('user_targets').upsert({
+    await _supabase.schema('setmefit').from('user_targets').upsert({
       'user_id': user.id,
       'target_calories': calories,
       'target_sleep': sleep,
@@ -24,6 +24,7 @@ class TargetService {
   Stream<Map<String, dynamic>> watchTargets() {
     final user = _supabase.auth.currentUser;
     return _supabase
+        .schema('setmefit')
         .from('user_targets')
         .stream(primaryKey: ['user_id'])
         .eq('user_id', user?.id ?? '')

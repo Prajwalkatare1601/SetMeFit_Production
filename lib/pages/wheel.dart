@@ -1,6 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+/// A futuristic, cyber-aesthetic donut chart that displays 5 interactive health pillars:
+/// Activities, Well-being, Diet, Medical, and Tongue.
+///
+/// Features:
+/// - Replaces the legacy speedometer with a clean, high-tech glowing central core.
+/// - Dynamic interactive tap animation with spring bounce and radial slice pop.
+/// - Vibrant neon cyber-glass aesthetic matching the dark futuristic theme.
 class WheelWithCenter extends StatefulWidget {
   final double diameter;
   final List<String> labels;
@@ -29,79 +37,176 @@ class WheelWithCenter extends StatefulWidget {
   State<WheelWithCenter> createState() => _WheelWithCenterState();
 }
 
-class _WheelWithCenterState extends State<WheelWithCenter> with SingleTickerProviderStateMixin {
+class _WheelWithCenterState extends State<WheelWithCenter>
+    with TickerProviderStateMixin {
   final GlobalKey _key = GlobalKey();
-  static const Color kGreen = Color(0xFF2BB673);
-  final double gapDegrees = 0.6;
+  final double gapDegrees = 2.4;
 
-  late final AnimationController _ctrl;
-  late Animation<double> _anim;
+  // Animation controllers
+  late final AnimationController _scoreCtrl;
+  late final AnimationController _pulseCtrl;
+  late final AnimationController _tapCtrl;
 
-  late final List<List<Color>> _sliceGradients = [
-    [const Color(0xFFBBA7F2), const Color(0xFF9F7ED9)],
-    [const Color(0xFFF8CC62), const Color(0xFFF4B63E)],
-    [const Color(0xFF71E1D8), const Color(0xFF5DE0C9)],
-    [const Color(0xFF8DE6DF), const Color(0xFF71C8C3)],
-    [const Color(0xFF7ACAF0), const Color(0xFF58B4DA)],
+  late Animation<double> _scoreAnim;
+  late Animation<double> _tapScaleAnim;
+  late Animation<double> _tapPopAnim;
+
+  int _selectedSlice = -1;
+  int _animatingSlice = -1;
+
+  // Futuristic Neon Pillar Colors
+  static const List<Color> _sliceColors = [
+    Color(0xFF6366F1), // Activities - Cyber Indigo
+    Color(0xFF8B5CF6), // Well-being - Cosmic Violet
+    Color(0xFF0EA5E9), // Diet - Electric Sky
+    Color(0xFFEC4899), // Medical - Neon Rose
+    Color(0xFF84CC16), // Tongue - Bio Lime
+  ];
+
+  static const List<List<Color>> _sliceGradients = [
+    [Color(0xFF6366F1), Color(0xFF4338CA)], // Activities
+    [Color(0xFF8B5CF6), Color(0xFF6D28D9)], // Well-being
+    [Color(0xFF0EA5E9), Color(0xFF0369A1)], // Diet
+    [Color(0xFFEC4899), Color(0xFFBE185D)], // Medical
+    [Color(0xFF84CC16), Color(0xFF4D7C0F)], // Tongue
   ];
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _anim = Tween<double>(begin: 0.0, end: _toPercent(widget.visibleScore)).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-    _ctrl.forward();
-  }
+    _selectedSlice = widget.selectedIndex >= 0 ? widget.selectedIndex : 0;
 
-  double _toPercent(double value) {
-    final min = widget.minScore;
-    final max = widget.maxScore;
-    if (max <= min) return 0.0;
-    return ((value - min) / (max - min)).clamp(0.0, 1.0);
+    final targetScore = (widget.visibleScore.isNaN || widget.visibleScore < 0)
+        ? 0.0
+        : widget.visibleScore;
+
+    // Score count-up animation
+    _scoreCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _scoreAnim = Tween<double>(begin: 0.0, end: targetScore).animate(
+      CurvedAnimation(parent: _scoreCtrl, curve: Curves.easeOutCubic),
+    );
+    _scoreCtrl.forward();
+
+    // Subtle ambient breathing glow animation
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+
+    // Tap feedback spring animation
+    _tapCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+
+    // Internal curved intervals ensure bounds stay strictly within 0.0 .. 1.0
+    _tapScaleAnim = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.88).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.88, end: 1.12).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.12, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 30,
+      ),
+    ]).animate(_tapCtrl);
+
+    _tapPopAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _tapCtrl, curve: Curves.easeOut),
+    );
   }
 
   @override
   void didUpdateWidget(covariant WheelWithCenter oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.visibleScore != widget.visibleScore) {
-      final newT = _toPercent(widget.visibleScore);
-      _anim = Tween<double>(begin: _anim.value, end: newT).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-      _ctrl..reset()..forward();
+      final safeOld = _scoreAnim.value.isNaN ? 0.0 : _scoreAnim.value;
+      final safeNew = (widget.visibleScore.isNaN || widget.visibleScore < 0)
+          ? 0.0
+          : widget.visibleScore;
+      _scoreAnim = Tween<double>(
+        begin: safeOld,
+        end: safeNew,
+      ).animate(CurvedAnimation(parent: _scoreCtrl, curve: Curves.easeOutCubic));
+      _scoreCtrl
+        ..reset()
+        ..forward();
+    }
+    if (widget.selectedIndex != oldWidget.selectedIndex &&
+        widget.selectedIndex >= 0) {
+      setState(() {
+        _selectedSlice = widget.selectedIndex;
+      });
     }
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _scoreCtrl.dispose();
+    _pulseCtrl.dispose();
+    _tapCtrl.dispose();
     super.dispose();
   }
 
-  String _ratingText(double p) {
-    if (p < 0.33) return 'Poor';
-    if (p < 0.66) return 'Good';
-    return 'Excellent';
+  double _toPercent(double value) {
+    if (value.isNaN) return 0.0;
+    final min = widget.minScore;
+    final max = widget.maxScore;
+    if (max <= min) return 0.0;
+    return ((value - min) / (max - min)).clamp(0.0, 1.0);
   }
 
-  Color _ratingColor(double p) {
-    if (p < 0.33) return Colors.red;
-    if (p < 0.66) return Colors.orange;
-    return Colors.green;
+  String _ratingText(double p) {
+    if (p < 0.35) return 'Needs Focus';
+    if (p < 0.65) return 'Good Pace';
+    if (p < 0.85) return 'Optimal';
+    return 'Peak Form';
+  }
+
+  Color _activeColor() {
+    if (_selectedSlice >= 0 && _selectedSlice < _sliceColors.length) {
+      return _sliceColors[_selectedSlice];
+    }
+    return const Color(0xFF00E5FF);
+  }
+
+  void _handleSliceTap(int slice) {
+    if (slice < 0 || slice >= widget.labels.length) return;
+
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _selectedSlice = slice;
+      _animatingSlice = slice;
+    });
+
+    _tapCtrl.forward(from: 0.0);
+
+    // Provide a 220ms delay so the user experiences the spring bounce and neon expansion
+    Future.delayed(const Duration(milliseconds: 220), () {
+      if (mounted) {
+        widget.onSliceTap(slice);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final size = widget.diameter;
     final outerR = size / 2;
-    final innerR = outerR * 0.52;
+    final innerR = outerR * 0.54;
     final sliceCount = widget.labels.length;
-
-    // Adjusted font scaling for smaller diameters
-    final scoreFont = (innerR * 0.55).clamp(24.0, 80.0);
-    final deltaFont = (innerR * 0.18).clamp(10.0, 16.0);
-    final ratingFont = (innerR * 0.22).clamp(11.0, 24.0);
+    final activeCol = _activeColor();
 
     return GestureDetector(
       key: _key,
+      behavior: HitTestBehavior.opaque,
       onTapDown: _onTapDown,
       child: SizedBox(
         width: size,
@@ -109,107 +214,279 @@ class _WheelWithCenterState extends State<WheelWithCenter> with SingleTickerProv
         child: Stack(
           alignment: Alignment.center,
           children: [
-            CustomPaint(
-              size: Size(size, size),
-              painter: _WheelPainter(
-                sliceCount: sliceCount,
-                gapDeg: gapDegrees,
-                innerRadius: innerR,
-                selectedIndex: widget.selectedIndex,
-                gradients: _sliceGradients,
-                rimColor: const Color(0xFF0B0B0B),
-                centerBorderColor: Colors.black.withOpacity(0.06),
-              ),
+            // 1. Futuristic Donut Slices & HUD Orbit
+            AnimatedBuilder(
+              animation: Listenable.merge([_tapPopAnim, _pulseCtrl]),
+              builder: (context, _) {
+                return CustomPaint(
+                  size: Size(size, size),
+                  painter: _FuturisticWheelPainter(
+                    sliceCount: sliceCount,
+                    gapDeg: gapDegrees,
+                    innerRadius: innerR,
+                    selectedIndex: _selectedSlice,
+                    animatingIndex: _animatingSlice,
+                    popProgress: _tapPopAnim.value,
+                    pulseProgress: _pulseCtrl.value,
+                    sliceGradients: _sliceGradients,
+                    sliceColors: _sliceColors,
+                  ),
+                );
+              },
             ),
 
-            // Labels & Icons
+            // 2. Interactive Pillar Buttons (Positioned is direct child of Stack!)
             ...List.generate(sliceCount, (i) {
               final sweep = 2 * pi / sliceCount;
               final start = -pi / 2 + sweep * i;
               final bis = start + sweep / 2;
-              // Slightly adjusted placement to avoid crowding the edge
-              final placeR = innerR + (outerR - innerR) * 0.58;
+              final placeR = innerR + (outerR - innerR) * 0.52;
+
+              final isSelected = i == _selectedSlice;
+              final isTapped = i == _animatingSlice;
+
               final cx = size / 2 + cos(bis) * placeR;
               final cy = size / 2 + sin(bis) * placeR;
-              final selected = i == widget.selectedIndex;
 
               return Positioned(
-                left: cx - 35, // Narrower hitbox
+                left: cx - 36,
                 top: cy - 28,
-                width: 70,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      padding: EdgeInsets.all(selected ? 8 : 6),
-                      decoration: BoxDecoration(
-                        color: selected ? Colors.white : Colors.white.withOpacity(0.06),
-                        shape: BoxShape.circle,
-                        boxShadow: selected ? [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))] : null,
+                width: 72,
+                child: AnimatedBuilder(
+                  animation: _tapCtrl,
+                  builder: (context, child) {
+                    final pop = isSelected
+                        ? (7.0 + (_tapPopAnim.value * 3.0))
+                        : 0.0;
+                    final dx = cos(bis) * pop;
+                    final dy = sin(bis) * pop;
+                    final scale = isTapped
+                        ? _tapScaleAnim.value
+                        : (isSelected ? 1.05 : 0.95);
+
+                    return Transform.translate(
+                      offset: Offset(dx, dy),
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Sleek Icon Pod with Glow
+                            Container(
+                              width: isSelected ? 32 : 26,
+                              height: isSelected ? 32 : 26,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: isSelected
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [Colors.white, Color(0xFFF1F5F9)],
+                                      )
+                                    : LinearGradient(
+                                        colors: [
+                                          Colors.white.withOpacity(0.12),
+                                          Colors.white.withOpacity(0.04),
+                                        ],
+                                      ),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.18),
+                                  width: isSelected ? 2.0 : 1.0,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: _sliceColors[i].withOpacity(0.7),
+                                          blurRadius: 12,
+                                          spreadRadius: 1,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  widget.icons[i],
+                                  size: isSelected ? 16 : 13,
+                                  color: isSelected
+                                      ? _sliceColors[i]
+                                      : Colors.white70,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            // Pillar Category Title
+                            Text(
+                              widget.labels[i],
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.white60,
+                                fontWeight: isSelected
+                                    ? FontWeight.w900
+                                    : FontWeight.w600,
+                                fontSize: isSelected ? 9.5 : 8.5,
+                                letterSpacing: 0.3,
+                                shadows: isSelected
+                                    ? [
+                                        Shadow(
+                                          color: _sliceColors[i].withOpacity(0.9),
+                                          blurRadius: 8,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Icon(widget.icons[i], size: selected ? 18 : 14, color: selected ? Colors.black : Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.labels[i],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
-                        fontWeight: FontWeight.w700,
-                        fontSize: selected ? 10 : 9,
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               );
             }),
 
-            // Semicircle gauge
-            Positioned(
-              left: size / 2 - innerR,
-              top: size / 2 - innerR * 1.15,
-              width: innerR * 2,
-              height: innerR * 1.06,
-              child: AnimatedBuilder(
-                animation: _anim,
-                builder: (context, _) {
-                  final p = _anim.value.clamp(0.0, 1.0);
-                  return CustomPaint(
-                      size: Size(innerR * 2, innerR * 1.06),
-                      painter: _SemiGaugePainter(percent: p, minScore: widget.minScore, maxScore: widget.maxScore)
-                  );
-                },
-              ),
+            // 3. Futuristic Central Core (Clean, Simple, Sci-Fi HUD)
+            AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (context, _) {
+                final pulse = _pulseCtrl.value;
+                return Container(
+                  width: innerR * 1.82,
+                  height: innerR * 1.82,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF131826),
+                        Color(0xFF090B12),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: activeCol.withOpacity(0.40 + (pulse * 0.20)),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: activeCol.withOpacity(0.25 + (pulse * 0.15)),
+                        blurRadius: 20 + (pulse * 8),
+                        spreadRadius: 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.7),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
 
-            // Center circle (White area)
-            Container(
-              width: innerR * 1.76,
-              height: innerR * 1.76,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 4))],
-                border: Border.all(color: Colors.black.withOpacity(0.04), width: 1.2),
-              ),
-            ),
+            // 4. Central Telemetry Content
+            AnimatedBuilder(
+              animation: _scoreAnim,
+              builder: (context, _) {
+                final displayScore = _scoreAnim.value.isNaN
+                    ? 0
+                    : _scoreAnim.value.toInt();
+                final percent = _toPercent(displayScore.toDouble());
 
-            // Central Score Text
-            SizedBox(
-              width: innerR * 1.1,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(widget.delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward, size: deltaFont, color: widget.delta >= 0 ? kGreen : const Color(0xFFD9534F)),
-                    const SizedBox(width: 4),
-                    Text('${widget.delta >= 0 ? '+' : '-'}${widget.delta.abs().toInt()}', style: TextStyle(fontSize: deltaFont, fontWeight: FontWeight.bold, color: widget.delta >= 0 ? kGreen : const Color(0xFFD9534F))),
-                  ]),
-                  Text(widget.visibleScore.toInt().toString(), style: TextStyle(fontSize: scoreFont, fontWeight: FontWeight.w900, color: Colors.black87, height: 1.1)),
-                  Text(_ratingText(_toPercent(widget.visibleScore)), style: TextStyle(fontSize: ratingFont, fontWeight: FontWeight.w800, color: _ratingColor(_toPercent(widget.visibleScore)))),
-                ],
-              ),
+                return SizedBox(
+                  width: innerR * 1.5,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Delta Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: (widget.delta >= 0
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFF43F5E))
+                              .withOpacity(0.16),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: (widget.delta >= 0
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFF43F5E))
+                                .withOpacity(0.4),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.delta >= 0
+                                  ? Icons.arrow_drop_up_rounded
+                                  : Icons.arrow_drop_down_rounded,
+                              size: 14,
+                              color: widget.delta >= 0
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFF43F5E),
+                            ),
+                            Text(
+                              '${widget.delta >= 0 ? '+' : ''}${widget.delta.toInt()}',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: widget.delta >= 0
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFF43F5E),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 3),
+
+                      // Large Bold Score
+                      Text(
+                        displayScore.toString(),
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: -1.0,
+                          height: 1.05,
+                        ),
+                      ),
+
+                      const SizedBox(height: 1),
+
+                      // Futuristic Label
+                      Text(
+                        'HEALTH SCORE',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white.withOpacity(0.5),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+
+                      const SizedBox(height: 2),
+
+                      // Status Text
+                      Text(
+                        _ratingText(percent).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                          color: activeCol,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -226,38 +503,51 @@ class _WheelWithCenterState extends State<WheelWithCenter> with SingleTickerProv
     final dy = local.dy - center.dy;
     final dist = sqrt(dx * dx + dy * dy);
     final outerR = box.size.width / 2;
-    final innerR = outerR * 0.52;
-    if (dist < innerR || dist > outerR) return;
+    final innerR = outerR * 0.54;
+
+    // Reject taps inside the center core or outside the donut ring
+    if (dist < innerR || dist > outerR + 14) return;
+
     double angle = atan2(dy, dx);
     double angleFromTop = angle - (-pi / 2);
     angleFromTop %= (2 * pi);
     if (angleFromTop < 0) angleFromTop += 2 * pi;
+
     final slice = (angleFromTop / (2 * pi) * widget.labels.length).floor();
-    widget.onSliceTap(slice);
+    if (slice >= 0 && slice < widget.labels.length) {
+      _handleSliceTap(slice);
+    }
   }
 }
 
-class _WheelPainter extends CustomPainter {
+/// Custom painter that renders futuristic segmented donut arcs with radial pop and cyber HUD details.
+class _FuturisticWheelPainter extends CustomPainter {
   final int sliceCount;
   final double gapDeg;
   final double innerRadius;
   final int selectedIndex;
-  final List<List<Color>> gradients;
-  final Color rimColor;
-  final Color centerBorderColor;
+  final int animatingIndex;
+  final double popProgress;
+  final double pulseProgress;
+  final List<List<Color>> sliceGradients;
+  final List<Color> sliceColors;
 
-  _WheelPainter({
+  _FuturisticWheelPainter({
     required this.sliceCount,
     required this.gapDeg,
     required this.innerRadius,
     required this.selectedIndex,
-    required this.gradients,
-    required this.rimColor,
-    required this.centerBorderColor,
+    required this.animatingIndex,
+    required this.popProgress,
+    required this.pulseProgress,
+    required this.sliceGradients,
+    required this.sliceColors,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || innerRadius <= 0) return;
+
     final cx = size.width / 2;
     final cy = size.height / 2;
     final center = Offset(cx, cy);
@@ -265,138 +555,109 @@ class _WheelPainter extends CustomPainter {
     final sweep = 2 * pi / sliceCount;
     final gap = gapDeg * pi / 180;
 
+    // 1. Draw Outer Cyber Orbit HUD Ring
+    final orbitPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.white.withOpacity(0.08);
+    canvas.drawCircle(center, outerR + 2, orbitPaint);
+
+    // 2. Draw Subtle Outer HUD Tick Marks
+    final tickPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.white.withOpacity(0.14);
+    for (int t = 0; t < 20; t++) {
+      final a = t * (2 * pi / 20);
+      final p1 = Offset(cx + cos(a) * (outerR + 2), cy + sin(a) * (outerR + 2));
+      final p2 = Offset(cx + cos(a) * (outerR + 6), cy + sin(a) * (outerR + 6));
+      canvas.drawLine(p1, p2, tickPaint);
+    }
+
+    // 3. Draw Donut Segments
     for (int i = 0; i < sliceCount; i++) {
       final start = -pi / 2 + i * sweep + gap / 2;
       final effSweep = sweep - gap;
+      final bis = start + effSweep / 2;
       final isSelected = i == selectedIndex;
+      final isAnimating = i == animatingIndex;
 
       canvas.save();
-      if (isSelected) {
-        final bis = start + effSweep / 2;
-        canvas.translate(cos(bis) * 6, sin(bis) * 6);
+
+      // Radial pop for the selected / active slice
+      final pop = isSelected
+          ? (7.0 + (isAnimating ? popProgress * 3.0 : 0.0))
+          : 0.0;
+      if (pop > 0) {
+        canvas.translate(cos(bis) * pop, sin(bis) * pop);
       }
 
       final rect = Rect.fromCircle(center: center, radius: outerR);
-      final shader = SweepGradient(startAngle: start, endAngle: start + effSweep, colors: gradients[i % gradients.length]).createShader(rect);
-      final fillPaint = Paint()..shader = shader;
+      final innerRect = Rect.fromCircle(center: center, radius: innerRadius);
 
       final path = Path()
         ..addArc(rect, start, effSweep)
-        ..arcTo(Rect.fromCircle(center: center, radius: innerRadius), start + effSweep, -effSweep, false)
+        ..arcTo(innerRect, start + effSweep, -effSweep, false)
         ..close();
 
+      // Gradient Fill
+      final gradients = sliceGradients[i % sliceGradients.length];
+      final shader = SweepGradient(
+        startAngle: start,
+        endAngle: start + effSweep,
+        colors: isSelected
+            ? gradients
+            : [
+                gradients[0].withOpacity(0.70),
+                gradients[1].withOpacity(0.70),
+              ],
+      ).createShader(rect);
+
+      final fillPaint = Paint()..shader = shader;
       canvas.drawPath(path, fillPaint);
 
-      final divider = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = max(0.6, outerR * 0.006)
-        ..color = Colors.black.withOpacity(0.12);
-      final dividerStart = start - gap / 2;
-      canvas.drawArc(Rect.fromCircle(center: center, radius: (outerR + innerRadius) / 2), dividerStart, 0.001, false, divider);
+      // Selected Slice Outer Glow & Luminescent Border
+      if (isSelected) {
+        final strokePaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0
+          ..color = Colors.white.withOpacity(0.92);
+        canvas.drawPath(path, strokePaint);
 
-      final stroke = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 4 : 2
-        ..color = Colors.black.withOpacity(isSelected ? 0.48 : 0.28);
-
-      final innerRect = Rect.fromCircle(center: center, radius: innerRadius + (isSelected ? 2.0 : 1.0));
-      canvas.drawArc(innerRect, start + effSweep, -effSweep, false, stroke);
+        // Hardware-accelerated glow stroke without complex mask filters
+        final glowPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4.0
+          ..color = sliceColors[i % sliceColors.length].withOpacity(0.45);
+        canvas.drawPath(path, glowPaint);
+      } else {
+        final borderPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = Colors.white.withOpacity(0.12);
+        canvas.drawPath(path, borderPaint);
+      }
 
       canvas.restore();
     }
 
-    final rimPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = innerRadius * 0.06
-      ..color = rimColor;
-    canvas.drawCircle(center, innerRadius, rimPaint);
+    // 4. Draw Inner Cyber Ring
+    final activeCol = selectedIndex >= 0 && selectedIndex < sliceColors.length
+        ? sliceColors[selectedIndex]
+        : const Color(0xFF00E5FF);
 
-    final border = Paint()
+    final innerRim = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = max(1.0, innerRadius * 0.028)
-      ..color = centerBorderColor;
-    canvas.drawCircle(center, innerRadius - 2.0, border);
+      ..strokeWidth = 1.5
+      ..color = activeCol.withOpacity(0.35);
+    canvas.drawCircle(center, innerRadius, innerRim);
   }
 
   @override
-  bool shouldRepaint(covariant _WheelPainter old) => old.selectedIndex != selectedIndex;
-}
-
-class _SemiGaugePainter extends CustomPainter {
-  final double percent;
-  final double minScore;
-  final double maxScore;
-  static const Color kGreen = Color(0xFF2BB673);
-
-  _SemiGaugePainter({required this.percent, this.minScore = 300, this.maxScore = 900});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 1.02);
-    final radius = min(size.width / 2, size.height) * 0.95;
-
-    const start = -pi;
-    const sweep = pi;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    // muted track behind arc (keep this so semicircle is still visible subtly)
-    canvas.drawArc(rect, start, sweep, false, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = radius * 0.14
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.black.withOpacity(0.06));
-
-    // ---- REMOVED: colorful gradient arc (intentional) ----
-
-    // inner contrast ring (thin)
-    final innerRect = Rect.fromCircle(center: center, radius: radius - radius * 0.24);
-    canvas.drawArc(innerRect, start + 0.04, sweep - 0.08, false, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..color = Colors.black.withOpacity(0.06));
-
-    // indicator knob position (kept)
-    final angle = start + sweep * percent;
-    final knob = Offset(center.dx + cos(angle) * radius, center.dy + sin(angle) * radius);
-
-    // knob shadow
-    canvas.drawCircle(knob.translate(2.0, 2.0), radius * 0.05, Paint()..color = Colors.black.withOpacity(0.16));
-    // white outer ring
-    canvas.drawCircle(knob, radius * 0.05, Paint()..color = Colors.white);
-    // inner dot uses exact green (for green region) or color by percent
-    final pick = percent < 0.33 ? const Color(0xFFD9534F) : (percent < 0.66 ? const Color(0xFFF5B041) : kGreen);
-    canvas.drawCircle(knob, radius * 0.034, Paint()..color = pick);
-    // thin white outline for crispness
-    canvas.drawCircle(knob, radius * 0.034, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = max(1.0, radius * 0.008)
-      ..color = Colors.white.withOpacity(0.95));
-
-    // tiny triangular needle inside rim (subtle)
-    final needleCenter = Offset(center.dx + cos(angle) * (radius * 0.78), center.dy + sin(angle) * (radius * 0.78));
-    final triSize = radius * 0.06;
-    final triPath = Path();
-    final ang1 = angle - 0.12;
-    final ang2 = angle + 0.12;
-    triPath.moveTo(needleCenter.dx + cos(angle) * triSize, needleCenter.dy + sin(angle) * triSize);
-    triPath.lineTo(needleCenter.dx + cos(ang1) * triSize * 1.6, needleCenter.dy + sin(ang1) * triSize * 1.6);
-    triPath.lineTo(needleCenter.dx + cos(ang2) * triSize * 1.6, needleCenter.dy + sin(ang2) * triSize * 1.6);
-    triPath.close();
-    canvas.drawPath(triPath, Paint()..color = Colors.black);
-
-    // min / max labels, horizontally shifted so they are symmetric visually
-    final labelStyle = TextStyle(color: Colors.black.withOpacity(0.78), fontSize: max(10.0, radius * 0.11), fontWeight: FontWeight.w600);
-    _drawText(canvas, minScore.toInt().toString(), Offset(center.dx - radius - 12, center.dy - radius * 0.12), labelStyle, TextAlign.left);
-    _drawText(canvas, maxScore.toInt().toString(), Offset(center.dx + radius - 16, center.dy - radius * 0.12), labelStyle, TextAlign.right);
+  bool shouldRepaint(covariant _FuturisticWheelPainter old) {
+    return old.selectedIndex != selectedIndex ||
+        old.animatingIndex != animatingIndex ||
+        old.popProgress != popProgress ||
+        old.pulseProgress != pulseProgress;
   }
-
-  void _drawText(Canvas canvas, String text, Offset pos, TextStyle style, TextAlign align) {
-    final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textAlign: align)..layout();
-    final dx = pos.dx - (align == TextAlign.center ? tp.width / 2 : (align == TextAlign.right ? tp.width : 0));
-    final dy = pos.dy - tp.height / 2;
-    tp.paint(canvas, Offset(dx, dy));
-  }
-
-  @override
-  bool shouldRepaint(covariant _SemiGaugePainter old) => old.percent != percent;
 }

@@ -12,7 +12,7 @@ class HealthService {
       // This is required because health tables reference 'profiles.id'
       final profile = data['profile'];
 
-      await _supabase.from('profiles').insert({
+      await _supabase.schema('setmefit').from('profiles').insert({
         'id': userId,
         'first_name': profile['first_name'],
         'last_name': profile['last_name'],
@@ -32,7 +32,7 @@ class HealthService {
       // 2. Insert Health Data into the consolidated table
       final health = data['health'];
 
-      await _supabase.from('user_health_profiles').insert({
+      await _supabase.schema('setmefit').from('user_health_profiles').insert({
         'id': userId, // Primary key linked to Auth UID
 
         // Movement

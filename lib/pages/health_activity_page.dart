@@ -123,6 +123,7 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
       if (user == null) return;
 
       final data = await Supabase.instance.client
+          .schema('setmefit')
           .from('profiles')
           .select('nickname, bmi, weight, goal')
           .eq('id', user.id)
@@ -142,6 +143,7 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
       if (user == null) return;
 
       final data = await Supabase.instance.client
+          .schema('setmefit')
           .from('user_targets')
           .select()
           .eq('user_id', user.id)
@@ -200,7 +202,7 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
       final firstDay = DateTime(_selectedYear, _selectedMonth, 1);
       final lastDay = DateTime(_selectedYear, _selectedMonth, daysInMonth);
 
-      final response = await Supabase.instance.client.from('activity_logs').select()
+      final response = await Supabase.instance.client.schema('setmefit').from('activity_logs').select()
           .eq('user_id', user.id)
           .gte('date', DateFormat('yyyy-MM-dd').format(firstDay))
           .lte('date', DateFormat('yyyy-MM-dd').format(lastDay))
@@ -240,17 +242,29 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
     }
   }
 
+  Future<void> _upsertActivityLog(String userId, String dateStr, Map<String, dynamic> payload) async {
+    final client = Supabase.instance.client;
+    final row = await client.schema('setmefit').from('activity_logs').select('id').eq('user_id', userId).eq('date', dateStr).maybeSingle();
+    if (row != null) {
+      await client.schema('setmefit').from('activity_logs').update(payload).eq('id', row['id']);
+    } else {
+      await client.schema('setmefit').from('activity_logs').insert({
+        'user_id': userId,
+        'date': dateStr,
+        ...payload,
+      });
+    }
+  }
+
   Future<void> _updateMetric(String key, dynamic val, int idx) async {
     final dateStr = DateFormat('yyyy-MM-dd').format(DateTime(_selectedYear, _selectedMonth, idx + 1));
     try {
       final user = Supabase.instance.client.auth.currentUser;
       final existing = _monthData[idx] ?? {};
-      await Supabase.instance.client.from('activity_logs').upsert({
-        'user_id': user!.id,
-        'date': dateStr,
+      await _upsertActivityLog(user!.id, dateStr, {
         ...existing,
         key: val,
-      }, onConflict: 'user_id,date');
+      });
       _fetchMonthData();
     } catch (e) { debugPrint(e.toString()); }
   }
@@ -274,11 +288,9 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
       Map<String, dynamic> updatedJson = Map.from(existing[jsonColumn] ?? {});
       updatedJson[subKey] = newValue;
 
-      await Supabase.instance.client.from('activity_logs').upsert({
-        'user_id': user!.id,
-        'date': dateStr,
+      await _upsertActivityLog(user!.id, dateStr, {
         jsonColumn: updatedJson,
-      }, onConflict: 'user_id,date');
+      });
 
       _fetchMonthData();
     } catch (e) {
@@ -331,12 +343,10 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
       int newTotal = currentTotal + inputValue;
 
       // 6. Push to Supabase with Conflict Resolution
-      await Supabase.instance.client.from('activity_logs').upsert({
-        'user_id': user.id,
-        'date': dateStr,
+      await _upsertActivityLog(user.id, dateStr, {
         mainCol: newTotal,
         jsonCol: currentJson,
-      }, onConflict: 'user_id,date');
+      });
 
       // 7. GOAL CELEBRATION TRIGGER
       // Accessing _userTargets with null-safety

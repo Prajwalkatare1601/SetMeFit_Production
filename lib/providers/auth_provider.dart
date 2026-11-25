@@ -129,6 +129,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (user == null) return false;
 
     final response = await supabase
+        .schema('setmefit')
         .from('user_details')
         .select('login_flag')
         .eq('id', user.id)
@@ -156,7 +157,7 @@ class AuthController extends StateNotifier<AuthState> {
 
     try {
       print("👉 inserting user_details for userId=${user.id}");
-      await supabase.from('user_details').upsert({
+      await supabase.schema('setmefit').from('user_details').upsert({
         'id': user.id,
         'username': username,
         'email': email,

@@ -72,10 +72,11 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       if (user == null) throw Exception("No user logged in");
 
       final profileData = await _supabase
+          .schema('setmefit')
           .from('user_details')
           .select()
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
       if (profileData != null) {
         String? avatarPath;
@@ -128,7 +129,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       );
 
       // Update DB with relative path only
-      await _supabase.from("user_details").update({
+      await _supabase.schema('setmefit').from("user_details").update({
         "avatar_url": filePath,
       }).eq("id", user.id);
 
@@ -159,7 +160,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       };
 
       if (updates.isNotEmpty) {
-        await _supabase.from('user_details').update(updates).eq('id', user.id);
+        await _supabase.schema('setmefit').from('user_details').update(updates).eq('id', user.id);
       }
 
       state = state.copyWith(

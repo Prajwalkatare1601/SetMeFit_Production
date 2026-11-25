@@ -47,26 +47,31 @@ class _UserProfilePageState extends State<UserProfilePage> with TickerProviderSt
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final data = await Supabase.instance.client
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .single();
+    try {
+      final data = await Supabase.instance.client
+          .schema('setmefit')
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
 
-    setState(() {
-      firstName = data['first_name'] ?? "USER";
-      lastName = data['last_name'] ?? "X";
-      nickName = data['nickname'] ?? "X";
-      userAge = data['age']?.toString() ?? "0";
-      userHeight = data['height']?.toString() ?? "0";
-      userWeight = data['weight']?.toString() ?? "0";
-      userGender = data['gender'] ?? "N/A";
-      userGoal = data['goal'] ?? "N/A";
-      userBMI = (data['bmi'] ?? 0.0).toDouble();
-      healthScore = data['health_score']?.toString() ?? "0";
-      // Fetching the new DOB column
-      userDOB = data['dob'] ?? "NOT_SET";
-    });
+      if (!mounted) return;
+      setState(() {
+        firstName = data?['first_name'] ?? "USER";
+        lastName = data?['last_name'] ?? "X";
+        nickName = data?['nickname'] ?? "X";
+        userAge = data?['age']?.toString() ?? "0";
+        userHeight = data?['height']?.toString() ?? "0";
+        userWeight = data?['weight']?.toString() ?? "0";
+        userGender = data?['gender'] ?? "N/A";
+        userGoal = data?['goal'] ?? "N/A";
+        userBMI = (data?['bmi'] ?? 0.0).toDouble();
+        healthScore = data?['health_score']?.toString() ?? "0";
+        userDOB = data?['dob'] ?? "NOT_SET";
+      });
+    } catch (e) {
+      debugPrint("Error fetching profile: \$e");
+    }
   }
 
   List<Map<String, dynamic>> userAchievements = [
@@ -540,7 +545,7 @@ class _UserProfilePageState extends State<UserProfilePage> with TickerProviderSt
                           bmiValue = double.parse(bmiValue.toStringAsFixed(1));
 
                           try {
-                            await Supabase.instance.client.from('profiles').update({
+                            await Supabase.instance.client.schema('setmefit').from('profiles').update({
                               'first_name': firstNameController.text.trim(),
                               'last_name': lastNameController.text.trim(),
                               'nickname': nickNameController.text.trim(),

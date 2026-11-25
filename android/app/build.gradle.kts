@@ -11,12 +11,12 @@ dependencies {
 }
 
 android {
-    namespace = "com.example.food_log"
+    namespace = "com.example.setmefit"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.example.food_log"
+        applicationId = "com.example.setmefit"
         minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = flutter.versionCode

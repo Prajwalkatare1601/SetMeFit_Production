@@ -56,7 +56,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     if (userId == null) return;
 
     // Insert new water log
-    await supabase.from('water_logs').insert({
+    await supabase.schema('setmefit').from('water_logs').insert({
       'user_id': userId,
       'amount_ml': amount,
     });
@@ -76,6 +76,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     DateTime(today.year, today.month, today.day).toIso8601String();
 
     await supabase
+        .schema('setmefit')
         .from('water_logs')
         .delete()
         .eq('user_id', userId)
@@ -94,6 +95,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     DateTime(today.year, today.month, today.day).toIso8601String();
 
     final result = await supabase
+        .schema('setmefit')
         .from('water_logs')
         .select('amount_ml')
         .eq('user_id', userId)
@@ -118,6 +120,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
       DateTime(today.year, today.month, today.day).toIso8601String();
 
       final response = await supabase
+          .schema('setmefit')
           .from('food_logs')
           .select(
           'id, quantity, consumed_at, foods(name, carbs, protein, fat, fiber, calories)')
@@ -179,10 +182,10 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
       if (logType == "food") {
         // Delete food log
-        await supabase.from('food_logs').delete().eq('id', id).eq('user_id', userId);
+        await supabase.schema('setmefit').from('food_logs').delete().eq('id', id).eq('user_id', userId);
       } else if (logType == "meal") {
         // Delete meal log
-        await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', userId);
+        await supabase.schema('setmefit').from('meal_logs').delete().eq('id', id).eq('user_id', userId);
       } else {
         throw Exception("Unknown log type: $logType");
       }

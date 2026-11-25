@@ -131,7 +131,7 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
       final client = Supabase.instance.client;
       final user = client.auth.currentUser;
       if (user != null) {
-        final data = await client.from('user_targets').select('target_sleep').eq('user_id', user.id).maybeSingle();
+        final data = await client.schema('setmefit').from('user_targets').select('target_sleep').eq('user_id', user.id).maybeSingle();
         if (data != null && data['target_sleep'] != null) {
           if (mounted) {
             setState(() { _targetSleep = (data['target_sleep'] as num).toDouble(); });
@@ -156,6 +156,7 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
       final lastDay = DateTime(_selectedYear, _selectedMonth, daysInMonth);
 
       final response = await Supabase.instance.client
+          .schema('setmefit')
           .from('wellbeing_logs')
           .select()
           .eq('user_id', user.id)
@@ -198,6 +199,7 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
 
       // 1. Check if a record exists for the specific selected date
       final existingLog = await Supabase.instance.client
+          .schema('setmefit')
           .from('wellbeing_logs')
           .select()
           .eq('user_id', user.id)
@@ -225,10 +227,18 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
         data['hobby_level'] = _selectedHobby;
       }
 
-      // Upsert targets the unique (user_id, log_date) constraint in your schema
-      await Supabase.instance.client
-          .from('wellbeing_logs')
-          .upsert(data, onConflict: 'user_id,log_date');
+      if (existingLog == null) {
+        await Supabase.instance.client
+            .schema('setmefit')
+            .from('wellbeing_logs')
+            .insert(data);
+      } else {
+        await Supabase.instance.client
+            .schema('setmefit')
+            .from('wellbeing_logs')
+            .update(data)
+            .eq('id', existingLog['id']);
+      }
 
       // Clean up
       _sleepController.clear();
@@ -366,8 +376,9 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
 
       // 1. Fetch existing meditation minutes for today
       final existing = await Supabase.instance.client
+          .schema('setmefit')
           .from('wellbeing_logs')
-          .select('meditation_min')
+          .select('id, meditation_min')
           .eq('user_id', user.id)
           .eq('log_date', todayStr)
           .maybeSingle();
@@ -377,16 +388,22 @@ class _WellbeingPageState extends State<WellbeingPage> with TickerProviderStateM
         totalMins += (existing['meditation_min'] as int);
       }
 
-      // 2. Perform the Upsert with the onConflict constraint
-      // This specifically targets the unique constraint causing your error
-      await Supabase.instance.client.from('wellbeing_logs').upsert(
-        {
-          'user_id': user.id,
-          'log_date': todayStr,
-          'meditation_min': totalMins,
-        },
-        onConflict: 'user_id,log_date', // Matches your DB unique constraint
-      );
+      if (existing != null) {
+        await Supabase.instance.client
+            .schema('setmefit')
+            .from('wellbeing_logs')
+            .update({'meditation_min': totalMins})
+            .eq('id', existing['id']);
+      } else {
+        await Supabase.instance.client
+            .schema('setmefit')
+            .from('wellbeing_logs')
+            .insert({
+              'user_id': user.id,
+              'log_date': todayStr,
+              'meditation_min': totalMins,
+            });
+      }
 
       // 3. Refresh the UI orbital rings
       _fetchLogs();

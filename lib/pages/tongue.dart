@@ -90,6 +90,7 @@ class _TongueDashboardPageState extends State<TongueDashboardPage> {
 
     try {
       final response = await _supabase
+          .schema('setmefit')
           .from('tongue_records')
           .select()
           .eq('user_id', user.id)
@@ -147,7 +148,7 @@ class _TongueDashboardPageState extends State<TongueDashboardPage> {
     final observations = _getObservations(metrics);
     final suggestions = _getSuggestions(metrics);
 
-    await _supabase.from('tongue_records').insert({
+    await _supabase.schema('setmefit').from('tongue_records').insert({
       'user_id': user.id,
       'color': metrics['color'],
       'coating': metrics['coating'],
