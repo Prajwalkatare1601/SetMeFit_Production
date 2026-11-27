@@ -30,6 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
   flutter_gen_runner: ^5.0.0
   build_runner: ^2.4.0
   flutter_riverpod: ^2.5.1
@@ -53,7 +54,7 @@ dependencies:
   path_provider: ^2.1.1
   video_player: ^2.8.1
   geolocator: ^10.1.0
-  audioplayers: ^5.2.1
+  audioplayers: ^6.8.1
   lottie: ^2.7.0
   flutter_animate: ^4.5.0
   http: ^1.2.0
@@ -205,3 +206,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
