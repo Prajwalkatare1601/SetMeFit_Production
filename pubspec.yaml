@@ -30,10 +30,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  health: ^14.0.0
+  permission_handler: ^11.3.1
   flutter_gen_runner: ^5.0.0
   build_runner: ^2.4.0
   flutter_riverpod: ^2.5.1
-  supabase_flutter: ^2.0.0
+  supabase_flutter: ^2.18.3
   google_sign_in: ^6.1.5  
   percent_indicator: ^4.2.3
   intl: ^0.20.3

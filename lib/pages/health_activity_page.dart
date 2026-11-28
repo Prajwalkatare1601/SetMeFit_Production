@@ -6,6 +6,9 @@ import 'dart:ui' as ui;
 import 'dart:math' as math;
 import '/features/workout/presentation/workout_screen.dart';
 import 'package:confetti/confetti.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/health_connect_service.dart';
+import 'package:health/health.dart';
 
 class ActivityTrackingPage extends StatefulWidget {
   @override
@@ -24,6 +27,16 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
   bool _isAddingMore = false; // Tracks if the selection menu is open
   final TextEditingController _dynamicInputController = TextEditingController();
   String? _selectedActivity;
+
+  // Health Connect integration
+  final HealthConnectService _healthConnectService = HealthConnectService.instance;
+  final TextEditingController _manualStepsController = TextEditingController();
+  int? _hcTodaySteps;
+  bool _isHcLoading = false;
+  bool _isHcWriting = false;
+  String _hcStatusMessage = "Checking Health Connect...";
+  HealthConnectPermissionsStatus? _hcPermissions;
+  HealthConnectSdkStatus? _hcSdkStatus;
 
   // Map defining activities for each Pillar
   final Map<String, List<String>> _pillarMap = {
@@ -103,6 +116,7 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
     _fetchMonthData();
     _fetchUserTargets();
     _fetchUserProfile();
+    _checkHealthConnectStatus();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToActiveDay();
@@ -181,6 +195,7 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
 
   @override
   void dispose() {
+    _manualStepsController.dispose();
     _stepsController.dispose(); _gymController.dispose();
     _yogaController.dispose(); _sportsController.dispose();
     _editController.dispose(); _insightPageController.dispose();
@@ -509,6 +524,8 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
                         const Divider(color: Colors.white10, thickness: 1, indent: 20, endIndent: 20),
                         const SizedBox(height: 10),
                         _buildHistoryFilterSection(),
+
+                        _buildHealthConnectStepSection(),
 
                         const SizedBox(height: 20),
                         _buildControlPanel(),
@@ -1228,6 +1245,475 @@ class _ActivityTrackingPageState extends State<ActivityTrackingPage> with Ticker
               Navigator.pop(c);
             },
             child: const Text("SAVE", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkHealthConnectStatus() async {
+    setState(() => _isHcLoading = true);
+    try {
+      final sdkStatus = await _healthConnectService.checkAvailability();
+      final permissions = await _healthConnectService.checkPermissions();
+      int? steps;
+      if (permissions.canRead) {
+        steps = await _healthConnectService.getTodaySteps();
+      }
+      if (!mounted) return;
+      setState(() {
+        _hcSdkStatus = sdkStatus;
+        _hcPermissions = permissions;
+        _hcTodaySteps = steps;
+        _isHcLoading = false;
+        if (sdkStatus == HealthConnectSdkStatus.sdkUnavailable) {
+          _hcStatusMessage = "Health Connect is not available on this device";
+        } else if (sdkStatus == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {
+          _hcStatusMessage = "Health Connect requires an update/install from Play Store";
+        } else if (permissions.isActivityRecognitionPermanentlyDenied) {
+          _hcStatusMessage = "Physical activity permission permanently denied. Open Settings to enable.";
+        } else if (!permissions.hasActivityRecognition) {
+          _hcStatusMessage = "Activity Recognition permission needed";
+        } else if (!permissions.canRead) {
+          _hcStatusMessage = "Health Connect read steps permission needed";
+        } else {
+          _hcStatusMessage = "Health Connect connected and authorized";
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isHcLoading = false;
+        _hcStatusMessage = "Error checking Health Connect: $e";
+      });
+    }
+  }
+
+  Future<void> _requestHealthConnectPermissions() async {
+    setState(() => _isHcLoading = true);
+    try {
+      final sdkStatus = await _healthConnectService.checkAvailability();
+      if (sdkStatus == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {
+        await _healthConnectService.installHealthConnect();
+        if (!mounted) return;
+        setState(() => _isHcLoading = false);
+        return;
+      }
+      final permissions = await _healthConnectService.requestPermissions();
+      int? steps;
+      if (permissions.canRead) {
+        steps = await _healthConnectService.getTodaySteps();
+      }
+      if (!mounted) return;
+      setState(() {
+        _hcSdkStatus = sdkStatus;
+        _hcPermissions = permissions;
+        _hcTodaySteps = steps;
+        _isHcLoading = false;
+        if (permissions.isActivityRecognitionPermanentlyDenied) {
+          _hcStatusMessage = "Physical activity permission permanently denied";
+        } else if (permissions.hasAll) {
+          _hcStatusMessage = "All Health Connect permissions granted!";
+        } else if (permissions.canRead) {
+          _hcStatusMessage = "Read permission granted (Write not granted)";
+        } else {
+          _hcStatusMessage = "Permissions not fully granted";
+        }
+      });
+      if (permissions.isActivityRecognitionPermanentlyDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Physical Activity permission is permanently denied. Tap to open Settings."),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: "SETTINGS",
+              textColor: Colors.white,
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_hcStatusMessage),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isHcLoading = false;
+        _hcStatusMessage = "Error requesting permissions: $e";
+      });
+    }
+  }
+
+  Future<void> _syncHealthConnectSteps() async {
+    setState(() => _isHcLoading = true);
+    try {
+      final permissions = await _healthConnectService.checkPermissions();
+      if (!permissions.canRead) {
+        if (!mounted) return;
+        setState(() => _isHcLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Read permission not granted. Please authorize first.")),
+        );
+        return;
+      }
+      final steps = await _healthConnectService.getTodaySteps();
+      if (!mounted) return;
+      setState(() {
+        _hcTodaySteps = steps;
+        _isHcLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Health Connect steps retrieved: ${steps ?? 0}")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isHcLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to read steps: $e")),
+      );
+    }
+  }
+
+  Future<void> _writeManualStepsToHealthConnect() async {
+    if (_isHcWriting) return; // Prevent repeated/concurrent submissions
+
+    final text = _manualStepsController.text.trim();
+    final count = int.tryParse(text);
+    if (count == null || count <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter a valid strictly positive integer for steps."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isHcWriting = true);
+    try {
+      final permissions = await _healthConnectService.checkPermissions();
+      if (!permissions.canWrite) {
+        final updatedPermissions = await _healthConnectService.requestPermissions();
+        if (!updatedPermissions.canWrite) {
+          if (!mounted) return;
+          setState(() => _isHcWriting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Health Connect Write permission not granted."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          return;
+        }
+      }
+
+      final success = await _healthConnectService.writeManualSteps(count);
+      if (!mounted) return;
+      setState(() => _isHcWriting = false);
+
+      if (success) {
+        _manualStepsController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Successfully wrote $count steps to Health Connect!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _syncHealthConnectSteps();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to write steps to Health Connect."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isHcWriting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error writing steps: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Widget _buildHealthConnectStepSection() {
+    final isAuthorized = (_hcPermissions?.canRead ?? false);
+    final isProviderUpdateRequired =
+        _hcSdkStatus == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired;
+    final isUnavailable = _hcSdkStatus == HealthConnectSdkStatus.sdkUnavailable;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orangeAccent.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.favorite_rounded,
+                  color: Colors.orangeAccent,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "GOOGLE HEALTH CONNECT",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    Text(
+                      "Step Tracking & Synchronization",
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_isHcLoading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.orangeAccent,
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isAuthorized
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.orangeAccent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    isAuthorized ? "CONNECTED" : "NOT SYNCED",
+                    style: TextStyle(
+                      color: isAuthorized ? Colors.greenAccent : Colors.orangeAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isAuthorized ? Icons.check_circle_outline : Icons.info_outline,
+                  color: isAuthorized ? Colors.greenAccent : Colors.orangeAccent,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _hcStatusMessage,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "TODAY'S STEPS",
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _hcTodaySteps != null ? "${_hcTodaySteps!}" : "--",
+                      style: const TextStyle(
+                        color: Colors.orangeAccent,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: (_isHcLoading || isUnavailable) ? null : _syncHealthConnectSteps,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.sync, size: 16),
+                  label: const Text(
+                    "READ STEPS",
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (!isAuthorized && !isUnavailable)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isHcLoading ? null : _requestHealthConnectPermissions,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade800,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(
+                    isProviderUpdateRequired ? Icons.download : Icons.lock_open,
+                    size: 16,
+                  ),
+                  label: Text(
+                    isProviderUpdateRequired
+                        ? "INSTALL / UPDATE HEALTH CONNECT"
+                        : "GRANT HEALTH CONNECT PERMISSIONS",
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+          const Divider(color: Colors.white12, height: 20),
+          const Text(
+            "WRITE MANUAL STEPS",
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _manualStepsController,
+                  enabled: !_isHcWriting,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "Enter steps (e.g. 1500)",
+                    hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.black.withOpacity(0.5),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.orangeAccent),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: (_isHcWriting || isUnavailable) ? null : _writeManualStepsToHealthConnect,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.12),
+                  foregroundColor: Colors.orangeAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.orangeAccent, width: 1),
+                  ),
+                ),
+                icon: _isHcWriting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.orangeAccent,
+                        ),
+                      )
+                    : const Icon(Icons.add_task, size: 16),
+                label: const Text(
+                  "WRITE",
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
         ],
       ),
